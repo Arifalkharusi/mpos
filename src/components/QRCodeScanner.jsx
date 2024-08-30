@@ -1,80 +1,58 @@
-import React, { useState, useEffect } from "react";
-import { BarcodeScanner } from "@capacitor-community/barcode-scanner";
+import React, { useState, useRef, useEffect } from "react";
+import { BrowserMultiFormatReader, BarcodeFormat } from "@zxing/browser";
 
 const QRCodeScanner = () => {
-  const [scanResult, setScanResult] = useState({ content: "", format: "" });
-  const [isScanning, setIsScanning] = useState(false);
-  const [permissionGranted, setPermissionGranted] = useState(false);
+  const [scanResult, setScanResult] = useState("");
+  const videoRef = useRef(null);
+  const codeReader = useRef(new BrowserMultiFormatReader()); // Ref to keep the instance
 
   useEffect(() => {
-    const checkInitialPermissions = async () => {
-      const status = await BarcodeScanner.checkPermission({ force: true });
-      if (status.granted) {
-        setPermissionGranted(true);
-      } else {
-        console.log("no permission");
+    // Start the barcode scanner when the component mounts
+    const startScanner = async () => {
+      try {
+        const videoInputDevices =
+          await codeReader.current.listVideoInputDevices();
+
+        if (videoInputDevices.length > 0) {
+          const selectedDeviceId = videoInputDevices[0].deviceId; // Use the first camera device
+
+          codeReader.current.decodeFromVideoDevice(
+            selectedDeviceId,
+            videoRef.current,
+            (result, err) => {
+              if (result) {
+                setScanResult(result.getText());
+                stopScanner(); // Optionally stop after a successful scan
+              }
+              if (err && !(err instanceof NotFoundException)) {
+                console.error(err);
+              }
+            }
+          );
+        }
+      } catch (err) {
+        console.error("Error initializing barcode scanner: ", err);
       }
     };
-    checkInitialPermissions();
+
+    startScanner();
+
+    // Clean up by stopping the scanner when the component unmounts
+    return () => {
+      stopScanner();
+    };
   }, []);
 
-  const requestPermission = async () => {
-    try {
-      const status = await BarcodeScanner.requestPermissions();
-      if (status.camera === "granted") {
-        setPermissionGranted(true);
-      } else {
-        alert("Camera permission is required to scan barcodes.");
-      }
-    } catch (error) {
-      console.error("Permission request failed", error);
-    }
-  };
-
-  const startScan = async () => {
-    if (!permissionGranted) {
-      await requestPermission();
-    }
-
-    if (!permissionGranted) {
-      return; // Exit if permission is not granted
-    }
-
-    try {
-      setIsScanning(true);
-      document.querySelector("body").style.background = "transparent";
-      await BarcodeScanner.hideBackground(); // Ensure the call is awaited
-
-      const result = await BarcodeScanner.startScan();
-      if (result.hasContent) {
-        setScanResult({ content: result.content, format: result.format });
-      }
-    } catch (error) {
-      console.error("Scan failed", error);
-    } finally {
-      stopScan(); // Stop scanning properly
-    }
-  };
-
-  const stopScan = () => {
-    BarcodeScanner.stopScan();
-    setIsScanning(false);
-    document.querySelector("body").style.background = "";
+  const stopScanner = () => {
+    codeReader.current.reset();
   };
 
   return (
-    <div className="code-scanner">
-      {isScanning ? (
-        <button onClick={stopScan}>Stop Scan</button>
-      ) : (
-        <button onClick={startScan}>Start Scan</button>
-      )}
-      {scanResult.content && (
-        <div>
-          <p>Scan Result: {scanResult.content}</p>
-          <p>Format: {scanResult.format}</p>
-        </div>
-      )}
+    <div>
+      <h3>Scan a Barcode</h3>
+      <video ref={videoRef} style={{ width: "300px", height: "300px" }} />
+      {scanResult && <p>Scan Result: {scanResult}</p>}
+      <button onClick={stopScanner}>Stop Scanner</button>
     </div>
   );
 };
