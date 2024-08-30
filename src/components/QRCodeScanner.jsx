@@ -11,6 +11,8 @@ const QRCodeScanner = () => {
       const status = await BarcodeScanner.checkPermission({ force: true });
       if (status.granted) {
         setPermissionGranted(true);
+      } else {
+        console.log("no permission");
       }
     };
     checkInitialPermissions();
