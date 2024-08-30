@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { BrowserMultiFormatReader, BarcodeFormat } from "@zxing/browser";
+import { BrowserMultiFormatReader, NotFoundException } from "@zxing/browser";
 
 const QRCodeScanner = () => {
   const [scanResult, setScanResult] = useState("");
@@ -7,11 +7,10 @@ const QRCodeScanner = () => {
   const codeReader = useRef(new BrowserMultiFormatReader()); // Ref to keep the instance
 
   useEffect(() => {
-    // Start the barcode scanner when the component mounts
     const startScanner = async () => {
       try {
         const videoInputDevices =
-          await codeReader.current.listVideoInputDevices();
+          await BrowserMultiFormatReader.listVideoInputDevices();
 
         if (videoInputDevices.length > 0) {
           const selectedDeviceId = videoInputDevices[0].deviceId; // Use the first camera device
@@ -29,6 +28,8 @@ const QRCodeScanner = () => {
               }
             }
           );
+        } else {
+          console.error("No video input devices found.");
         }
       } catch (err) {
         console.error("Error initializing barcode scanner: ", err);
