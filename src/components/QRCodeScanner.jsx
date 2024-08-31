@@ -4,17 +4,20 @@ import Quagga from "quagga";
 const QRCodeScanner = () => {
   const videoRef = useRef(null);
   const [barcode, setBarcode] = useState("");
-  const [scanning, setScanning] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isScanning, setIsScanning] = useState(false);
+  const [error, setError] = useState(null);
 
-  useEffect(() => {
+  const initQuagga = () => {
     Quagga.init(
       {
         inputStream: {
           type: "LiveStream",
           constraints: {
-            width: 640,
-            height: 480,
-            facingMode: "environment", // or "user" for front camera
+            width: { min: 640 },
+            height: { min: 480 },
+            facingMode: "environment",
+            aspectRatio: { min: 1, max: 2 },
           },
           target: videoRef.current,
         },
@@ -34,24 +37,27 @@ const QRCodeScanner = () => {
             "upc_reader",
             "upc_e_reader",
             "i2of5_reader",
-            "2of5_reader",
-            "code_93_reader",
           ],
-          multiple: false,
         },
         locate: true,
       },
       (err) => {
         if (err) {
-          console.error("Error initializing Quagga:", err);
+          console.error("Quagga initialization failed", err);
+          setError(`Initialization error: ${err.name} ${err.message}`);
           return;
         }
-        setScanning(true);
-        Quagga.start();
+        console.log("Quagga initialization succeeded");
+        setIsInitialized(true);
+        setError(null);
       }
     );
 
     Quagga.onDetected(handleDetected);
+  };
+
+  useEffect(() => {
+    initQuagga();
 
     return () => {
       Quagga.offDetected(handleDetected);
@@ -60,35 +66,91 @@ const QRCodeScanner = () => {
   }, []);
 
   const handleDetected = (result) => {
-    if (result.boxes && result.boxes.length > 0) {
-      // Check if the barcode is fully within the scanning area
-      const isFullyVisible = result.boxes.every(
-        (box) => box[0] > 0 && box[0] < 640 && box[1] > 0 && box[1] < 480
-      );
-
-      if (isFullyVisible) {
-        Quagga.stop();
-        setScanning(false);
-        setBarcode(result.codeResult.code);
-      }
+    console.log("Barcode detected", result);
+    if (result.codeResult.startInfo.error < 0.25) {
+      setBarcode(result.codeResult.code);
+      setIsScanning(false);
+      Quagga.pause();
     }
   };
 
-  const restartScanning = () => {
+  const startScanning = () => {
+    setIsScanning(true);
     setBarcode("");
-    setScanning(true);
     Quagga.start();
+  };
+
+  const stopScanning = () => {
+    setIsScanning(false);
+    Quagga.pause();
+  };
+
+  const resetScanner = () => {
+    setBarcode("");
+    setError(null);
+    setIsScanning(false);
+    Quagga.stop();
+    setTimeout(() => {
+      initQuagga();
+    }, 100);
   };
 
   return (
     <div>
-      <div ref={videoRef} style={{ display: scanning ? "block" : "none" }} />
-      {scanning ? (
-        <p>Scanning... Please ensure the entire barcode is visible.</p>
-      ) : (
+      <div
+        ref={videoRef}
+        style={{ width: "100%", maxWidth: "640px", height: "auto" }}
+      >
+        {isInitialized && (
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              paddingBottom: "75%",
+            }}
+          >
+            <div
+              style={{
+                position: "absolute",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                border: "3px solid red",
+              }}
+            >
+              <p
+                style={{
+                  background: "rgba(255,255,255,0.7)",
+                  padding: "10px",
+                  margin: 0,
+                }}
+              >
+                Align barcode within the red box and press the scan button
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+      {error && <p style={{ color: "red" }}>{error}</p>}
+      {barcode ? (
         <>
           <p>Scanned Barcode: {barcode}</p>
-          <button onClick={restartScanning}>Scan Another</button>
+          <button onClick={resetScanner}>Scan Another</button>
+        </>
+      ) : (
+        <>
+          <p>{isInitialized ? "Ready to scan" : "Scanner initializing..."}</p>
+          <button
+            onMouseDown={startScanning}
+            onMouseUp={stopScanning}
+            onMouseLeave={stopScanning}
+            onTouchStart={startScanning}
+            onTouchEnd={stopScanning}
+            disabled={!isInitialized}
+          >
+            {isScanning ? "Scanning..." : "Push to Scan"}
+          </button>
         </>
       )}
     </div>
