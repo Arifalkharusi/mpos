@@ -1,59 +1,54 @@
-import React, { useState, useRef, useEffect } from "react";
-import { BrowserMultiFormatReader, NotFoundException } from "@zxing/browser";
+import React, { useRef, useState, useEffect } from "react";
+import Quagga from "quagga";
 
 const QRCodeScanner = () => {
-  const [scanResult, setScanResult] = useState("");
   const videoRef = useRef(null);
-  const codeReader = useRef(new BrowserMultiFormatReader()); // Ref to keep the instance
+  const [barcode, setBarcode] = useState("");
 
   useEffect(() => {
-    const startScanner = async () => {
-      try {
-        const videoInputDevices =
-          await BrowserMultiFormatReader.listVideoInputDevices();
-
-        if (videoInputDevices.length > 0) {
-          const selectedDeviceId = videoInputDevices[0].deviceId; // Use the first camera device
-
-          codeReader.current.decodeFromVideoDevice(
-            selectedDeviceId,
-            videoRef.current,
-            (result, err) => {
-              if (result) {
-                setScanResult(result.getText());
-                stopScanner(); // Optionally stop after a successful scan
-              }
-              if (err && !(err instanceof NotFoundException)) {
-                console.error(err);
-              }
-            }
-          );
-        } else {
-          console.error("No video input devices found.");
+    Quagga.init(
+      {
+        inputStream: {
+          type: "LiveStream",
+          constraints: {
+            width: 640,
+            height: 480,
+            facingMode: "environment", // or "user" for front camera
+          },
+          target: videoRef.current,
+        },
+        decoder: {
+          readers: [
+            "ean_reader",
+            "ean_8_reader",
+            "code_128_reader",
+            "code_39_reader",
+            "code_39_vin_reader",
+          ],
+        },
+      },
+      (err) => {
+        if (err) {
+          console.error("Error initializing Quagga:", err);
+          return;
         }
-      } catch (err) {
-        console.error("Error initializing barcode scanner: ", err);
+        Quagga.start();
       }
-    };
+    );
 
-    startScanner();
+    Quagga.onDetected((result) => {
+      setBarcode(result.codeResult.code);
+    });
 
-    // Clean up by stopping the scanner when the component unmounts
     return () => {
-      stopScanner();
+      Quagga.stop();
     };
   }, []);
 
-  const stopScanner = () => {
-    codeReader.current.reset();
-  };
-
   return (
     <div>
-      <h3>Scan a Barcode</h3>
-      <video ref={videoRef} style={{ width: "300px", height: "300px" }} />
-      {scanResult && <p>Scan Result: {scanResult}</p>}
-      <button onClick={stopScanner}>Stop Scanner</button>
+      <div ref={videoRef} />
+      <p>Scanned Barcode: {barcode}</p>
     </div>
   );
 };
